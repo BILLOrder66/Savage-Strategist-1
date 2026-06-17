@@ -1244,47 +1244,83 @@ function generatePdfReport(record){
   var capLines1 = doc.splitTextToSize("Blended future/present and people/mission position.", chartSize);
   doc.text(capLines1, chartX0, chartY0+chartSize+22);
 
-  // --- Right: standalone radar chart (own scale, not tied to the dot above) ---
+  // --- Right: standalone diamond chart (own scale, not tied to the dot above), styled to
+  // visually match the quad chart: shaded quadrant wedges with archetype names inside them,
+  // axis labels using the same people/mission/present/future vocabulary as the quad. ---
   var radarX0 = chartX0 + chartSize + gap;
   var rcx = radarX0 + chartSize/2;
   var rcy = chartY0 + chartSize/2 + 8;
-  var rMaxR = chartSize/2 - 26;
+  var rMaxR = chartSize/2 - 22;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   setText(rgb.sub);
   doc.text("Your spread across all four archetypes", radarX0, chartY0 - 14);
 
-  // Angular positions chosen to match the quad chart's spatial layout exactly:
+  // Angular positions match the quad chart's spatial layout exactly:
   // Consular = upper-left, Fire starter = upper-right, Edgewalker = lower-right, Fire keeper = lower-left.
   var radarLabels = [
-    {key:"CS", name:"Consular",     color: rgb.cs, angle: -3*Math.PI/4},
-    {key:"FS", name:"Fire starter", color: rgb.fs, angle: -Math.PI/4},
-    {key:"EW", name:"Edgewalker",   color: rgb.ew, angle:  Math.PI/4},
-    {key:"FK", name:"Fire keeper",  color: rgb.fk, angle:  3*Math.PI/4}
+    {key:"CS", name:"Consular",     bg: rgb.csBg, dk: rgb.csDk, dot: rgb.cs, angle: -3*Math.PI/4},
+    {key:"FS", name:"Fire starter", bg: rgb.fsBg, dk: rgb.fsDk, dot: rgb.fs, angle: -Math.PI/4},
+    {key:"EW", name:"Edgewalker",   bg: rgb.ewBg, dk: rgb.ewDk, dot: rgb.ew, angle:  Math.PI/4},
+    {key:"FK", name:"Fire keeper",  bg: rgb.fkBg, dk: rgb.fkDk, dot: rgb.fk, angle:  3*Math.PI/4}
   ];
   function radarPointAt(l, frac){
     return { x: rcx + Math.cos(l.angle)*frac*rMaxR, y: rcy + Math.sin(l.angle)*frac*rMaxR };
   }
 
+  var aUp    = { x: rcx, y: rcy - rMaxR };
+  var aRight = { x: rcx + rMaxR, y: rcy };
+  var aDown  = { x: rcx, y: rcy + rMaxR };
+  var aLeft  = { x: rcx - rMaxR, y: rcy };
+
+  // Shaded wedges, colored exactly like the quad chart's four quadrants
+  function fillTriRGB(p1, p2, p3, col){
+    setFill(col);
+    doc.triangle(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, "F");
+  }
+  fillTriRGB({x:rcx,y:rcy}, aUp, aLeft, radarLabels[0].bg);   // Consular: top+left
+  fillTriRGB({x:rcx,y:rcy}, aUp, aRight, radarLabels[1].bg);  // Fire starter: top+right
+  fillTriRGB({x:rcx,y:rcy}, aRight, aDown, radarLabels[2].bg);// Edgewalker: right+bottom
+  fillTriRGB({x:rcx,y:rcy}, aDown, aLeft, radarLabels[3].bg); // Fire keeper: bottom+left
+
+  setDraw(rgb.line);
+  doc.setLineWidth(0.75);
+  doc.lines([[aRight.x-aUp.x, aRight.y-aUp.y],[aDown.x-aRight.x, aDown.y-aRight.y],[aLeft.x-aDown.x, aLeft.y-aDown.y],[aUp.x-aLeft.x, aUp.y-aLeft.y]], aUp.x, aUp.y, [1,1], "S", true);
+  doc.setDrawColor(255,255,255);
+  doc.setLineWidth(0.75);
+  doc.line(rcx + (aLeft.x-rcx)*0.5, rcy, rcx + (aRight.x-rcx)*0.5, rcy);
+  doc.line(rcx, rcy + (aUp.y-rcy)*0.5, rcx, rcy + (aDown.y-rcy)*0.5);
   setDraw(rgb.line);
   doc.setLineWidth(0.5);
-  [0.25,0.5,0.75,1.0].forEach(function(frac){
-    var pts = radarLabels.map(function(l){ return radarPointAt(l, frac); });
-    for(var i=0;i<pts.length;i++){
-      var a1 = pts[i], a2 = pts[(i+1)%pts.length];
-      doc.line(a1.x, a1.y, a2.x, a2.y);
-    }
-  });
+  doc.line(aLeft.x, aLeft.y, aRight.x, aRight.y);
+  doc.line(aUp.x, aUp.y, aDown.x, aDown.y);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  setText(rgb.sub);
+  doc.text("people", rcx, aUp.y-6, {align:"center"});
+  doc.text("mission", rcx, aDown.y+12, {align:"center"});
+  doc.text("present", aLeft.x-4, aLeft.y+3, {align:"right"});
+  doc.text("future", aRight.x+4, aRight.y+3);
+
+  // Archetype names inside each wedge, near the outer edge -- same placement logic as the quad chart
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
   radarLabels.forEach(function(l){
-    var p = radarPointAt(l, 1.0);
-    doc.line(rcx, rcy, p.x, p.y);
+    var r = rMaxR * 0.6;
+    var lp = { x: rcx + Math.cos(l.angle)*r, y: rcy + Math.sin(l.angle)*r };
+    var align = "center";
+    if(lp.x > rcx+5) align = "left";
+    else if(lp.x < rcx-5) align = "right";
+    setText(l.dk);
+    doc.text(l.name, lp.x, lp.y, {align: align});
   });
 
   // Data polygon
   var dPts = radarLabels.map(function(l){ return radarPointAt(l, record.pct[l.key]/100); });
   doc.setFillColor(31,35,40);
-  if(doc.setGState) doc.setGState(new doc.GState({opacity:0.16}));
+  if(doc.setGState) doc.setGState(new doc.GState({opacity:0.18}));
   doc.lines(
     [[dPts[1].x-dPts[0].x, dPts[1].y-dPts[0].y],[dPts[2].x-dPts[1].x, dPts[2].y-dPts[1].y],[dPts[3].x-dPts[2].x, dPts[3].y-dPts[2].y],[dPts[0].x-dPts[3].x, dPts[0].y-dPts[3].y]],
     dPts[0].x, dPts[0].y, [1,1], "F", true
@@ -1298,19 +1334,10 @@ function generatePdfReport(record){
   );
   radarLabels.forEach(function(l){
     var p = radarPointAt(l, record.pct[l.key]/100);
-    setFill(l.color);
-    doc.circle(p.x, p.y, 2.2, "F");
-  });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  radarLabels.forEach(function(l){
-    var lp = radarPointAt(l, 1.32);
-    var align = "center";
-    if(lp.x > rcx+8) align = "left";
-    else if(lp.x < rcx-8) align = "right";
-    setText(rgb.ink);
-    doc.text(l.name, lp.x, lp.y, {align: align === "left" ? "left" : (align === "right" ? "right" : "center")});
+    setFill(l.dot);
+    doc.setDrawColor(255,255,255);
+    doc.setLineWidth(0.75);
+    doc.circle(p.x, p.y, 2.4, "FD");
   });
 
   doc.setFont("helvetica", "italic");
@@ -1562,47 +1589,79 @@ function renderPlot(record){
 function renderRadar(record){
   var size = 320;
   var cx = size/2, cy = size/2;
-  var maxR = 110;
-  // Angular positions chosen to match the quad chart's spatial layout exactly:
+  var maxR = 108;
+  // Angular positions match the quad chart's spatial layout exactly:
   // Consular = upper-left, Fire starter = upper-right, Edgewalker = lower-right, Fire keeper = lower-left.
   var labels = [
-    {key:"CS", name:"Consular",    color:"#3C3489", angle: -3*Math.PI/4}, // upper-left (-135°)
-    {key:"FS", name:"Fire starter",color:"#D85A30", angle: -Math.PI/4},   // upper-right (-45°)
-    {key:"EW", name:"Edgewalker",  color:"#185FA5", angle:  Math.PI/4},   // lower-right (45°)
-    {key:"FK", name:"Fire keeper", color:"#0F6E56", angle:  3*Math.PI/4}  // lower-left (135°)
+    {key:"CS", name:"Consular",    bg:"#EEEDFE", dk:"#26215C", dot:"#3C3489", angle: -3*Math.PI/4},
+    {key:"FS", name:"Fire starter",bg:"#FAECE7", dk:"#4A1B0C", dot:"#D85A30", angle: -Math.PI/4},
+    {key:"EW", name:"Edgewalker",  bg:"#E6F1FB", dk:"#042C53", dot:"#185FA5", angle:  Math.PI/4},
+    {key:"FK", name:"Fire keeper", bg:"#E1F5EE", dk:"#085041", dot:"#0F6E56", angle:  3*Math.PI/4}
   ];
 
   function pointFor(l, frac){
     return { x: cx + Math.cos(l.angle)*frac*maxR, y: cy + Math.sin(l.angle)*frac*maxR };
   }
 
-  var rings = [0.25, 0.5, 0.75, 1.0].map(function(frac){
-    var pts = labels.map(function(l){ var p = pointFor(l, frac); return p.x+","+p.y; }).join(" ");
-    return '<polygon points="' + pts + '" fill="none" stroke="#e3e1d8" stroke-width="1"/>';
+  // Shaded quadrant wedges (each a triangle from center to the two axis tips flanking it),
+  // colored to match the quad chart exactly, so the radar reads as a visual sibling of it.
+  var axisTipUp    = { x: cx, y: cy - maxR };       // people (top)
+  var axisTipRight = { x: cx + maxR, y: cy };       // future (right)
+  var axisTipDown  = { x: cx, y: cy + maxR };       // mission (bottom)
+  var axisTipLeft  = { x: cx - maxR, y: cy };        // present (left)
+
+  var wedges =
+    '<polygon points="' + cx+','+cy + ' ' + axisTipUp.x+','+axisTipUp.y + ' ' + axisTipLeft.x+','+axisTipLeft.y + '" fill="' + labels[0].bg + '"/>' + // Consular: top+left
+    '<polygon points="' + cx+','+cy + ' ' + axisTipUp.x+','+axisTipUp.y + ' ' + axisTipRight.x+','+axisTipRight.y + '" fill="' + labels[1].bg + '"/>' + // Fire starter: top+right
+    '<polygon points="' + cx+','+cy + ' ' + axisTipRight.x+','+axisTipRight.y + ' ' + axisTipDown.x+','+axisTipDown.y + '" fill="' + labels[2].bg + '"/>' + // Edgewalker: right+bottom
+    '<polygon points="' + cx+','+cy + ' ' + axisTipDown.x+','+axisTipDown.y + ' ' + axisTipLeft.x+','+axisTipLeft.y + '" fill="' + labels[3].bg + '"/>'; // Fire keeper: bottom+left
+
+  var outerBorder = '<polygon points="' + axisTipUp.x+','+axisTipUp.y + ' ' + axisTipRight.x+','+axisTipRight.y + ' ' + axisTipDown.x+','+axisTipDown.y + ' ' + axisTipLeft.x+','+axisTipLeft.y + '" fill="none" stroke="#cfcdc3" stroke-width="1"/>';
+
+  var midRings = [0.5].map(function(frac){
+    var pts = [axisTipUp, axisTipRight, axisTipDown, axisTipLeft].map(function(p){
+      return (cx + (p.x-cx)*frac) + ',' + (cy + (p.y-cy)*frac);
+    }).join(" ");
+    return '<polygon points="' + pts + '" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.6"/>';
   }).join("");
 
-  var spokes = "", labelEls = "";
-  labels.forEach(function(l){
-    var p = pointFor(l, 1.0);
-    spokes += '<line x1="' + cx + '" y1="' + cy + '" x2="' + p.x + '" y2="' + p.y + '" stroke="#e3e1d8" stroke-width="1"/>';
-    var labelP = pointFor(l, 1.24);
+  var crossAxes =
+    '<line x1="' + axisTipLeft.x + '" y1="' + axisTipLeft.y + '" x2="' + axisTipRight.x + '" y2="' + axisTipRight.y + '" stroke="#cfcdc3" stroke-width="1"/>' +
+    '<line x1="' + axisTipUp.x + '" y1="' + axisTipUp.y + '" x2="' + axisTipDown.x + '" y2="' + axisTipDown.y + '" stroke="#cfcdc3" stroke-width="1"/>';
+
+  // Axis end labels, same vocabulary as the quad chart (people/mission/present/future)
+  var axisLabels =
+    '<text x="' + cx + '" y="' + (axisTipUp.y-8) + '" font-size="10" fill="#5f5e5a" text-anchor="middle">people</text>' +
+    '<text x="' + cx + '" y="' + (axisTipDown.y+18) + '" font-size="10" fill="#5f5e5a" text-anchor="middle">mission</text>' +
+    '<text x="' + (axisTipLeft.x-6) + '" y="' + (axisTipLeft.y+4) + '" font-size="10" fill="#5f5e5a" text-anchor="end">present</text>' +
+    '<text x="' + (axisTipRight.x+6) + '" y="' + (axisTipRight.y+4) + '" font-size="10" fill="#5f5e5a">future</text>';
+
+  // Archetype names placed inside each wedge, near the outer edge -- same placement logic as the quad chart's corner labels.
+  function wedgeLabelPos(l){
+    // bisector direction of the wedge, pulled in slightly from the true corner so text stays inside the diamond
+    var midAngle = l.angle;
+    var r = maxR * 0.62;
+    return { x: cx + Math.cos(midAngle)*r, y: cy + Math.sin(midAngle)*r };
+  }
+  var quadLabelEls = labels.map(function(l){
+    var p = wedgeLabelPos(l);
     var anchor = "middle";
-    if(labelP.x > cx+12) anchor = "start";
-    else if(labelP.x < cx-12) anchor = "end";
-    labelEls += '<text x="' + labelP.x + '" y="' + labelP.y + '" font-size="12" font-weight="600" fill="#1f2328" text-anchor="' + anchor + '">' + l.name + '</text>';
-  });
+    if(p.x > cx+6) anchor = "start";
+    else if(p.x < cx-6) anchor = "end";
+    return '<text x="' + p.x + '" y="' + p.y + '" font-size="11.5" font-weight="700" fill="' + l.dk + '" text-anchor="' + anchor + '">' + l.name + '</text>';
+  }).join("");
 
   var dataPts = labels.map(function(l){ var p = pointFor(l, record.pct[l.key]/100); return p.x+","+p.y; }).join(" ");
   var dataDots = labels.map(function(l){
     var p = pointFor(l, record.pct[l.key]/100);
-    return '<circle cx="' + p.x + '" cy="' + p.y + '" r="3.5" fill="' + l.color + '"/>';
+    return '<circle cx="' + p.x + '" cy="' + p.y + '" r="3.5" fill="' + l.dot + '" stroke="#fff" stroke-width="1"/>';
   }).join("");
 
-  var svg = '<svg viewBox="0 0 ' + size + ' ' + size + '" width="100%" height="320" role="img" aria-label="Radar chart showing percentage score for each of the four archetypes, arranged to match the quadrant chart">' +
-    rings + spokes +
-    '<polygon points="' + dataPts + '" fill="#1f2328" fill-opacity="0.16" stroke="#1f2328" stroke-width="2"/>' +
+  var svg = '<svg viewBox="0 0 ' + size + ' ' + size + '" width="100%" height="320" role="img" aria-label="Diamond chart showing percentage score for each of the four archetypes, shaded and arranged to match the quadrant chart">' +
+    wedges + outerBorder + midRings + crossAxes + axisLabels +
+    '<polygon points="' + dataPts + '" fill="#1f2328" fill-opacity="0.18" stroke="#1f2328" stroke-width="2"/>' +
     dataDots +
-    labelEls +
+    quadLabelEls +
     '</svg>';
 
   document.getElementById("radar-container").innerHTML = svg;
